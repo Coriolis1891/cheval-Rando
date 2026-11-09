@@ -1,0 +1,222 @@
+# "cheval.brf" -- profil BRouter pour la randonnée équestre (Sentiers à Cheval)
+# Privilégie les chemins équestres, pistes et chemins de terre, évite le bitume, les routes,
+# les marches, les barrières infranchissables (échaliers, tourniquets, grilles à bétail)
+# et les voies interdites aux chevaux. Les réglages ci-dessous sont modifiés par l'application.
+
+---context:global
+
+assign turnInstructionRoundabouts true
+assign considerTurnRestrictions false
+assign turnInstructionMode 1
+assign add_beeline false
+assign pass1coefficient 3
+assign validForFoot true
+
+# Vitesse de référence (pas) pour l'estimation du temps de BRouter (non utilisée par l'application)
+assign totalMass  = 600
+assign maxSpeed   = 8
+
+# --- Réglages modifiés par l'application
+assign rider_level 2           # 1 = débutant, 2 = confirmé, 3 = expert
+assign avoid_level 2           # 1 = faible, 2 = moyen, 3 = fort (évitement des routes)
+assign avoid_asphalt true      # bitume dur et glissant pour les sabots
+assign avoid_hills false
+assign prefer_forests false
+assign prefer_rivers false
+assign shortest false          # rapproche le coût de la distance pure
+
+assign correctMisplacedViaPoints = false
+assign correctMisplacedViaPointsDistance = 400
+
+---context:way
+
+assign downhillcost   switch avoid_hills 60 switch equal rider_level 1 30 0
+assign downhillcutoff switch avoid_hills 3 switch equal rider_level 1 6 10
+assign uphillcost     switch avoid_hills 80 switch equal rider_level 1 30 0
+assign uphillcutoff   switch avoid_hills 3 switch equal rider_level 1 6 10
+
+assign turncost 0
+
+assign horse_ok   horse=yes|designated
+assign horse_no   horse=no|private
+assign no_access  switch horse_ok false switch horse_no true access=no|private
+
+assign is_paved or surface=asphalt|concrete|paved|paving_stones|sett|cobblestone|metal
+                   tracktype=grade1
+
+# Pénalités de revêtement
+assign surfacepenalty
+    switch surface=asphalt|concrete|paved switch avoid_asphalt 1.5 1.15
+    switch surface=paving_stones|sett|cobblestone switch avoid_asphalt 1.7 1.3
+    switch surface=metal|wood 1.4
+    switch surface=rock|stone 2.0
+    switch surface=mud 1.6
+    switch surface=pebblestone 1.3
+    1.0
+
+# Difficulté du sentier (échelle de randonnée) selon le niveau du cavalier
+assign sacpenalty
+    switch sac_scale= 1.0
+    switch sac_scale=hiking 1.1
+    switch sac_scale=mountain_hiking switch equal rider_level 3 1.6 switch equal rider_level 2 3.0 10000
+    switch sac_scale=demanding_mountain_hiking switch equal rider_level 3 5.0 10000
+    10000
+
+assign visibilitypenalty
+    switch trail_visibility=bad|horrible|no switch equal rider_level 3 2.0 8.0
+    1.0
+
+assign smoothpenalty
+    switch smoothness=impassable 10000
+    switch smoothness=very_horrible|horrible switch equal rider_level 3 2.0 switch equal rider_level 2 4.0 20
+    switch smoothness=very_bad switch equal rider_level 1 2.5 1.3
+    1.0
+
+# Coût des routes selon le niveau d'évitement
+assign roadmult switch equal avoid_level 1 1.0 switch equal avoid_level 2 1.6 3.0
+
+assign trackpenalty
+    switch tracktype=grade1 switch avoid_asphalt 1.35 1.1
+    switch tracktype=grade2 1.05
+    1.0
+
+assign pathpenalty
+    switch horse_ok 1.0
+    switch bicycle=designated switch foot=designated 2.2 1.8
+    switch foot=designated 2.0
+    1.25
+
+assign noriverpenalty
+    switch prefer_rivers
+        switch estimated_river_class=   1.8
+        switch estimated_river_class=1  1.7
+        switch estimated_river_class=2  1.35
+        switch estimated_river_class=3  1.15
+        switch estimated_river_class=4  1.08
+        1.0 1.0
+
+assign noforestpenalty
+    switch prefer_forests
+        switch estimated_forest_class=   1.8
+        switch estimated_forest_class=1  1.7
+        switch estimated_forest_class=2  1.6
+        switch estimated_forest_class=3  1.45
+        switch estimated_forest_class=4  1.3
+        switch estimated_forest_class=5  1.15
+        1.0 1.0
+
+assign noisepenalty
+    switch equal avoid_level 3
+        switch estimated_noise_class=   1.0
+        switch estimated_noise_class=1  1.1
+        switch estimated_noise_class=2  1.2
+        switch estimated_noise_class=3  1.4
+        switch estimated_noise_class=4  1.8
+        switch estimated_noise_class=5  2.2
+        2.6 1.0
+
+assign basecost
+    switch or highway=motorway|motorway_link motorroad=yes   10000
+    switch highway=trunk|trunk_link                          10000
+    switch route=ferry                                       10000
+    switch highway=steps|via_ferrata|corridor|elevator|platform|bus_stop|construction|proposed  10000
+    switch no_access                                         10000
+    switch highway=bridleway                                 1.0
+    switch horse=designated                                  1.0
+    switch highway=track multiply trackpenalty switch horse_ok 1.0 1.05
+    switch highway=path pathpenalty
+    switch highway=footway switch horse_ok 1.3 6.0
+    switch highway=cycleway switch horse_ok 1.4 8.0
+    switch highway=pedestrian switch horse_ok 2.0 12.0
+    switch highway=raceway 50
+    switch highway=service switch service= ( multiply roadmult 1.6 ) ( multiply roadmult 2.2 )
+    switch highway=unclassified multiply roadmult 1.9
+    switch highway=road multiply roadmult 2.0
+    switch highway=living_street|residential multiply roadmult 2.6
+    switch highway=tertiary|tertiary_link multiply roadmult 4.0
+    switch highway=secondary|secondary_link multiply roadmult 7.0
+    switch highway=primary|primary_link multiply roadmult 12.0
+    10000
+
+assign rawcost
+    switch greater basecost 9999 basecost
+    multiply basecost
+    multiply surfacepenalty
+    multiply sacpenalty
+    multiply visibilitypenalty
+    multiply smoothpenalty
+    multiply noriverpenalty
+    multiply noforestpenalty
+    noisepenalty
+
+assign costfactor
+    switch greater rawcost 9999 10000
+    switch shortest add 1 multiply 0.3 max 0 sub rawcost 1
+    rawcost
+
+assign initialcost
+    switch highway=primary|primary_link|secondary|secondary_link 300
+    switch highway=tertiary|tertiary_link 100
+    0
+
+# way priorities used for voice hint generation
+
+assign priorityclassifier =
+  if      ( highway=motorway                  ) then  30
+  else if ( highway=motorway_link             ) then  29
+  else if ( highway=trunk                     ) then  28
+  else if ( highway=trunk_link                ) then  27
+  else if ( highway=primary                   ) then  23
+  else if ( highway=primary_link              ) then  23
+  else if ( highway=secondary                 ) then  22
+  else if ( highway=secondary_link            ) then  22
+  else if ( highway=tertiary                  ) then  21
+  else if ( highway=tertiary_link             ) then  21
+  else if ( highway=residential|living_street ) then  15
+  else if ( highway=unclassified              ) then  8
+  else if ( highway=service                   ) then  8
+  else if ( highway=bridleway                 ) then  7
+  else if ( highway=track|road|path )
+       then if or surface=asphalt|paved|concrete|wood|metal tracktype=grade1 then 8 else 6
+  else if ( highway=cycleway|footway          ) then  6
+  else if ( highway=pedestrian                ) then  2
+  else 0
+
+assign isbadoneway = false
+assign isgoodoneway = if reversedirection=yes then oneway=-1
+                      else if oneway= then junction=roundabout else oneway=yes|true|1
+assign isroundabout = junction=roundabout
+assign islinktype = highway=motorway_link|trunk_link|primary_link|secondary_link|tertiary_link
+assign isgoodforcars = if greater priorityclassifier 6 then true
+                  else if highway=residential|living_street|service then true
+                  else if ( and highway=track tracktype=grade1 ) then true
+                  else false
+
+assign classifiermask
+                      add multiply isgoodoneway   2
+                      add multiply isroundabout   4
+                      add multiply islinktype     8
+                          multiply isgoodforcars 16
+
+---context:node
+
+assign horse_ok   horse=yes|designated
+assign horse_no   horse=no|private
+
+# Barrières : échaliers, tourniquets, chicanes et grilles à bétail sont infranchissables à cheval
+assign barriercost
+    switch horse_ok 0
+    switch barrier= 0
+    switch barrier=stile|turnstile|full-height_turnstile|kissing_gate|cycle_barrier|motorcycle_barrier|cattle_grid|kerb|bump_gate|log 1000000
+    switch barrier=gate|swing_gate|lift_gate|sliding_gate|hampshire_gate|horse_stile 60
+    switch barrier=block|bollard|chain|entrance 20
+    switch barrier=wall|fence|ditch|hedge|jersey_barrier|guard_rail 1000000
+    80
+
+assign initialcost
+    add barriercost
+    switch horse_no 1000000
+    switch railway=level_crossing 400
+    switch highway=traffic_signals|crossing 40
+    switch ford=yes 60
+    0

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8b5e34"/>
+      <stop offset="1" stop-color="#5a361d"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <path d="M30 430 C 130 360, 210 470, 320 400 S 450 380, 486 330" fill="none" stroke="#a7d39a" stroke-width="20" stroke-linecap="round" stroke-dasharray="2 40"/>
+  <!-- Fer à cheval -->
+  <path d="M168 372 L150 250 C 138 160, 186 104, 256 104 C 326 104, 374 160, 362 250 L344 372"
+        fill="none" stroke="#f3e3c8" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#6b4226">
+    <rect x="137" y="290" width="24" height="12" rx="6" transform="rotate(-8 149 296)"/>
+    <rect x="128" y="230" width="24" height="12" rx="6" transform="rotate(-4 140 236)"/>
+    <rect x="140" y="170" width="24" height="12" rx="6" transform="rotate(-30 152 176)"/>
+    <rect x="351" y="290" width="24" height="12" rx="6" transform="rotate(8 363 296)"/>
+    <rect x="360" y="230" width="24" height="12" rx="6" transform="rotate(4 372 236)"/>
+    <rect x="348" y="170" width="24" height="12" rx="6" transform="rotate(30 360 176)"/>
+  </g>
+  <rect x="134" y="364" width="62" height="26" rx="10" fill="#f3e3c8"/>
+  <rect x="316" y="364" width="62" height="26" rx="10" fill="#f3e3c8"/>
+</svg>
