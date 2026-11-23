@@ -29,6 +29,10 @@ L'app doit être servie en **HTTPS** pour la géolocalisation et l'installation.
 
 **GitHub Pages** : créez un dépôt, envoyez-y le contenu du dossier, puis *Settings → Pages → Deploy from branch (main, /root)*.
 
+## Application iPhone (GPS écran verrouillé)
+
+Voir **[IPHONE.md](IPHONE.md)** : installation sur votre iPhone avec Xcode et un compte Apple gratuit.
+
 ## L'installer sur le téléphone
 
 - **Android (Chrome)** : ouvrez l'adresse → menu ⋮ → « Installer l'application » / « Ajouter à l'écran d'accueil ».

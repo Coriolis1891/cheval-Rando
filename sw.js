@@ -1,7 +1,7 @@
 // Service worker : l'application et les cartes téléchargées fonctionnent sans réseau.
-const CACHE = 'sentiers-cheval-v2';
+const CACHE = 'sentiers-cheval-v3';
 const SHELL = [
-  './', 'index.html', 'style.css', 'app.js', 'extras.js', 'rides.js', 'reports.js', 'manifest.webmanifest', 'profiles/cheval.brf',
+  './', 'index.html', 'style.css', 'app.js', 'extras.js', 'rides.js', 'reports.js', 'native.js', 'manifest.webmanifest', 'profiles/cheval.brf',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
 ];

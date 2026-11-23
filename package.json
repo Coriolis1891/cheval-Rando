@@ -1,0 +1,21 @@
+{
+  "name": "sentiers-cheval",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sentiers à Cheval : application iPhone (Capacitor) construite à partir de l'application web.",
+  "scripts": {
+    "build": "node scripts/build-www.mjs",
+    "ios": "npm run build && npx cap sync ios && npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor-community/background-geolocation": "1.3.1",
+    "@capacitor/core": "8.6.2",
+    "@capacitor/filesystem": "8.1.5",
+    "@capacitor/ios": "8.6.2",
+    "@capacitor/share": "8.0.3",
+    "leaflet": "1.9.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.2"
+  }
+}

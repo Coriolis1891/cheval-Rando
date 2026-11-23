@@ -158,18 +158,18 @@ async function recStart(kind, restore) {
   Object.assign(rec, { on: true, paused: false, kind, pts: [], dist: 0, moving: 0, elapsed: 0, up: 0, altRef: null, t0: Date.now(), last: null, planned: null, repairs: [], rebuilt: 0, hiddenAt: 0 }, restore || {});
   rec.resumedAt = Date.now();
   rec.line = L.polyline(rec.pts.map((p) => [p[1], p[0]]), { color: '#d64545', weight: 5, opacity: 0.9, interactive: false }).addTo(map);
-  rec.watch = navigator.geolocation.watchPosition(onRecPosition, (e) => {
+  rec.watch = watchGeo(onRecPosition, (e) => {
     // Refus d'autorisation dès le départ : on annule. Plus tard (application en arrière-plan,
     // page qui se ferme…), on garde l'enregistrement : il pourra être repris.
     if (e.code === 1 && !rec.pts.length && document.visibilityState === 'visible') { toast('Autorisez la localisation pour enregistrer un trajet'); recCancel(); }
-  }, { enableHighAccuracy: true, maximumAge: 1000 });
+  });
   rec.timer = setInterval(() => { renderRecBar(); if (Date.now() % 15000 < 1000) recPersist(); }, 1000);
   if (kind === 'manual') {
     $('#recBar').hidden = false; $('#btnRecord').classList.add('on');
     $('#btnRecord').title = 'Enregistrement en cours';
     try { rec.lock = await navigator.wakeLock?.request('screen'); } catch { /* */ }
     if (!isDesktop()) setSnap('peek');
-    toast(restore ? 'Enregistrement repris' : 'C’est parti ! Ne verrouillez pas le téléphone : pour le mettre en poche, touchez « 🔒 Poche ».', 6000);
+    toast(restore ? 'Enregistrement repris' : NATIVE ? 'C’est parti ! Vous pouvez verrouiller le téléphone et le mettre en poche.' : 'C’est parti ! Ne verrouillez pas le téléphone : pour le mettre en poche, touchez « 🔒 Poche ».', 6000);
   }
   recPersist(); renderRecBar();
 }
@@ -195,7 +195,7 @@ function recFinish() {
   return out.track.length >= 2 && out.stats.dist >= 150 ? out : null;
 }
 function recCancel() {
-  if (rec.watch != null) navigator.geolocation.clearWatch(rec.watch);
+  rec.watch?.stop();
   clearInterval(rec.timer); rec.lock?.release?.(); rec.line?.remove(); pocketOff();
   Object.assign(rec, { on: false, paused: false, watch: null, timer: null, lock: null, line: null, kind: null });
   try { localStorage.removeItem(REC_KEY); } catch { /* */ }
@@ -210,7 +210,7 @@ addEventListener('visibilitychange', async () => {
   if (rec.kind === 'manual' && navigator.wakeLock) { try { rec.lock = await navigator.wakeLock.request('screen'); } catch { /* */ } }
   const away = rec.hiddenAt ? (Date.now() - rec.hiddenAt) / 60000 : 0;
   rec.hiddenAt = 0;
-  if (away >= 1 && !rec.paused) toast(`⚠️ GPS coupé pendant ${Math.round(away)} min (écran verrouillé ou application quittée). Le passage manquant est reconstitué par les chemins. Utilisez « 🔒 Poche » plutôt que de verrouiller.`, 8000);
+  if (away >= 1 && !rec.paused && !NATIVE) toast(`⚠️ GPS coupé pendant ${Math.round(away)} min (écran verrouillé ou application quittée). Le passage manquant est reconstitué par les chemins. Utilisez « 🔒 Poche » plutôt que de verrouiller.`, 8000);
 });
 
 /* Mode « Poche » : écran noir (économise la batterie) qui ignore les touchers ; l'application reste

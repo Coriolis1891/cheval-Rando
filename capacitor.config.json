@@ -1,0 +1,9 @@
+{
+  "appId": "com.fchaze.sentierscheval",
+  "appName": "Sentiers Cheval",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#6b4226"
+  }
+}

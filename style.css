@@ -386,3 +386,6 @@ input[type=checkbox] { accent-color: var(--green); width: 18px; height: 18px; }
 @keyframes pk-fill { to { --p: 100%; } }
 .rec-btns .btn-pocket { flex: none; }
 .rebuilt { grid-column: 1 / -1; margin: 6px 0 0; }
+
+/* Application iPhone : le GPS continue écran verrouillé, le mode poche est inutile */
+.native .btn-pocket { display: none !important; }

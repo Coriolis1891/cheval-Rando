@@ -217,10 +217,10 @@ async function startNav() {
   setTimeout(() => map.invalidateSize(), 300);
   speak(r.hints?.length ? 'Navigation démarrée.' : 'Navigation démarrée. Instructions de virage non disponibles pour ce parcours, suivez le tracé.');
   try { nav.lock = await navigator.wakeLock?.request('screen'); } catch { /* */ }
-  nav.watch = navigator.geolocation.watchPosition(onNavPosition, (e) => {
+  nav.watch = watchGeo(onNavPosition, (e) => {
     if (e.code === 1) { toast('Autorisez la localisation pour naviguer'); stopNav(); }
     else if (!nav.lastFix || Date.now() - nav.lastFix > 30000) $('#navDist').textContent = 'Signal GPS faible…';
-  }, { enableHighAccuracy: true, maximumAge: 1000 });
+  });
 }
 
 // Le maintien de l'écran allumé est perdu quand l'application passe en arrière-plan : on le redemande au retour
@@ -231,7 +231,7 @@ addEventListener('visibilitychange', async () => {
 function stopNav() {
   nav.on = false;
   if (typeof ridesOnNavStop === 'function') ridesOnNavStop();
-  if (nav.watch != null) navigator.geolocation.clearWatch(nav.watch);
+  nav.watch?.stop();
   nav.watch = null; nav.lock?.release?.(); nav.lock = null;
   try { speechSynthesis.cancel(); } catch { /* */ }
   document.body.classList.remove('navigating');
@@ -512,9 +512,10 @@ async function shareRoute() {
     s: { avoid: settings.avoid, level: settings.level, pace: settings.pace, asphalt: settings.asphalt, hills: settings.hills, forest: settings.forest, shortest: settings.shortest },
     poi: pois,
   };
-  const url = `${location.origin}${location.pathname}#p=${await packShare(obj)}`;
+  const url = `${NATIVE ? WEB_URL : location.origin + location.pathname}#p=${await packShare(obj)}`;
   const df = difficulty(r);
   const text = `🐴 ${name} – ${df.emoji} ${df.name}, ${fmtKm(r.length)}, ${fmtDur(rideTime(r).ride)} en selle, ${r.ascend} m D+${pois.length ? `, ${pois.length} point(s) d’intérêt` : ''}`;
+  if (NATIVE) { await nativeShareLink(name, text, url); return; }
   if (navigator.share) {
     try { await navigator.share({ title: name, text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
   }

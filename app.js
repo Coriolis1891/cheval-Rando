@@ -1228,6 +1228,7 @@ function routeName() {
   return state.mode === 'loop' ? `Boucle de ${fmtKm(state.route.length)} – ${short(state.start?.label)}` : `${short(state.start?.label)} → ${short(state.end?.label)}`;
 }
 async function shareOrDownload(text, filename, mime) {
+  if (NATIVE) { try { await nativeShareFile(text, filename); } catch (e) { console.error(e); toast('Partage impossible'); } return; }
   const blob = new Blob([text], { type: mime });
   const file = new File([blob], filename, { type: mime });
   if (navigator.canShare?.({ files: [file] }) && matchMedia('(pointer: coarse)').matches) {
