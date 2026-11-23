@@ -44,6 +44,7 @@
       <span id="navRemain"></span>
       <button id="nav3d" aria-label="Basculer entre vue 3D et 2D">2D</button>
       <button id="navMute" aria-label="Couper ou activer la voix">🔊</button>
+      <button class="btn-pocket" aria-label="Mode poche : écran noir sans couper le GPS">🔒</button>
       <button id="navStop">✕ Arrêter</button>
     </div>
   </section>
@@ -70,9 +71,19 @@
     </div>
     <div class="rec-btns">
       <button id="recPause">⏸ Pause</button>
+      <button class="btn-pocket" title="Écran noir verrouillé pour mettre le téléphone dans la poche sans couper le GPS">🔒 Poche</button>
       <button id="recStop" class="stop">⏹ Terminer</button>
     </div>
   </section>
+  <!-- Mode poche : écran noir, touchers ignorés, GPS actif -->
+  <div id="pocket" hidden role="dialog" aria-label="Mode poche">
+    <div class="pk-in">
+      <div class="pk-logo">🐴</div>
+      <div id="pocketStats" class="pk-stats"></div>
+      <p>Enregistrement en cours.<br>Ne verrouillez pas le téléphone.</p>
+      <div class="pk-hold"><span></span>Maintenez appuyé pour déverrouiller</div>
+    </div>
+  </div>
   <div id="busy" hidden><span class="spinner"></span><span id="busyText">Calcul…</span><button id="btnCancel" class="ghost">Annuler</button></div>
 
   <section id="sheet" class="sheet" data-snap="half">

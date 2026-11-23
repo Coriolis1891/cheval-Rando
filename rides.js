@@ -16,7 +16,14 @@ const fmtClock = (s) => {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
   return h ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}` : `${m}:${String(x).padStart(2, '0')}`;
 };
-const fmtSpeed = (m, s) => (s > 30 ? `${((m / 1000) / (s / 3600)).toFixed(1).replace('.', ',')} km/h` : '–');
+/** Vitesse moyenne. Si le temps « en mouvement » est incohérent (GPS coupé quand l'écran était verrouillé),
+    on prend la durée totale ; et jamais plus de 6 m/s (≈ 22 km/h) de moyenne pour une sortie à cheval. */
+const fmtSpeed = (m, s, el) => {
+  let t = s || 0;
+  if (el && t < 0.5 * el) t = el;
+  t = Math.max(t, (m || 0) / 6);
+  return t > 30 ? `${((m / 1000) / (t / 3600)).toFixed(1).replace('.', ',')} km/h` : '–';
+};
 const fmtDate = (t) => new Date(t).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + new Date(t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
 /** Simplifie une trace (Douglas-Peucker, tolérance en mètres) pour économiser la mémoire. */
@@ -70,7 +77,7 @@ function pushItem(key, item, max) {
 const rec = {
   on: false, paused: false, kind: null, // 'manual' (Créer un trajet) | 'nav' (guidage)
   pts: [], dist: 0, moving: 0, elapsed: 0, up: 0, altRef: null, t0: 0, lastT: 0, last: null,
-  planned: null, watch: null, timer: null, lock: null, line: null,
+  planned: null, watch: null, timer: null, lock: null, line: null, repairs: [], rebuilt: 0, hiddenAt: 0,
 };
 
 function recPersist() {
@@ -83,14 +90,17 @@ function onRecPosition(pos) {
   const c = pos.coords, now = pos.timestamp || Date.now();
   if (rec.kind === 'manual' && !nav.on) { const ll = showMe(pos); map.panTo(ll, { animate: true }); }
   if (rec.paused) { rec.last = null; return; }
-  if (c.accuracy > 35 && rec.pts.length) return; // position trop imprécise
+  if (c.accuracy > 50 && rec.pts.length) return; // position trop imprécise
   const p = [+c.longitude.toFixed(6), +c.latitude.toFixed(6), c.altitude == null ? null : +c.altitude.toFixed(1)];
   if (rec.last) {
     const d = hav(cll(rec.last), cll(p)), dt = (now - rec.lastT) / 1000;
     if (d < 6) return; // immobile : on n'ajoute pas de point
     if (dt > 0 && d / dt > 25) return; // saut aberrant (> 90 km/h)
     rec.dist += d;
-    if (dt < 60 && d / dt > 0.5) rec.moving += dt; // temps en mouvement
+    const v = dt > 0 ? d / dt : 0;
+    // Temps en mouvement ; après une coupure du GPS, on compte la coupure si la vitesse moyenne est plausible
+    if (dt < 60 ? v > 0.5 : v > 0.3 && v < 7) rec.moving += dt;
+    var gap = dt > 25 && d > 80 ? { a: rec.last, dt } : null;
   }
   // Dénivelé positif : on ne compte une montée qu'au-delà de 4 m (le GPS est bruité en altitude)
   if (p[2] != null && (c.altitudeAccuracy == null || c.altitudeAccuracy < 25)) {
@@ -100,16 +110,44 @@ function onRecPosition(pos) {
   }
   rec.pts.push(p); rec.last = p; rec.lastT = now;
   rec.line?.addLatLng([p[1], p[0]]);
+  if (gap) repairGap(gap.a, p, gap.dt);
   if (rec.pts.length % 5 === 0) recPersist();
   renderRecBar();
 }
+
+/**
+ * Coupure du GPS (écran verrouillé, application en arrière-plan, tunnel de végétation…) :
+ * au lieu d'une ligne droite, on reconstitue le passage le plus probable par les chemins
+ * (calcul « cheval » entre le dernier point connu et le nouveau), si c'est cohérent avec le temps écoulé.
+ */
+function repairGap(a, b, dt) {
+  const job = (async () => {
+    try {
+      const straight = hav(cll(a), cll(b));
+      const { gj } = await brouter([cll(a), cll(b)]);
+      const f = gj.features[0], len = +f.properties['track-length'];
+      if (!(len > straight) || len > straight * 2.5 + 300 || len / dt > 7) return; // incohérent : on garde la ligne droite
+      const i = rec.pts.indexOf(b);
+      if (i < 1 || rec.pts[i - 1] !== a) return;
+      const mid = f.geometry.coordinates.slice(1, -1).map((c) => [+(+c[0]).toFixed(6), +(+c[1]).toFixed(6), c[2] == null ? null : +c[2]]);
+      rec.pts.splice(i, 0, ...mid);
+      rec.dist += len - straight; rec.rebuilt += len;
+      rec.line?.setLatLngs(rec.pts.map((q) => [q[1], q[0]]));
+      recPersist(); renderRecBar();
+    } catch (e) { console.warn('Reconstitution du tracé impossible', e); }
+  })();
+  rec.repairs.push(job);
+}
+/** Attend la fin des reconstitutions en cours (au plus 20 s) avant de terminer. */
+const recSettle = () => Promise.race([Promise.allSettled(rec.repairs), new Promise((ok) => setTimeout(ok, 20000))]);
 
 function renderRecBar() {
   if (!rec.on) return;
   const el = rec.elapsed + (rec.paused ? 0 : (Date.now() - rec.resumedAt) / 1000);
   $('#recDist').textContent = rec.dist < 1000 ? `${Math.round(rec.dist)} m` : fmtKm(rec.dist);
   $('#recTime').textContent = fmtClock(el);
-  $('#recSpeed').textContent = fmtSpeed(rec.dist, rec.moving);
+  $('#recSpeed').textContent = fmtSpeed(rec.dist, rec.moving, el);
+  if (!$('#pocket').hidden) $('#pocketStats').textContent = `${$('#recDist').textContent} · ${fmtClock(el)}`;
   $('#recTitle').textContent = rec.paused ? 'En pause' : 'Enregistrement en cours';
   $('#recBar').classList.toggle('paused', rec.paused);
 }
@@ -117,7 +155,7 @@ function renderRecBar() {
 async function recStart(kind, restore) {
   if (rec.on) return;
   if (!navigator.geolocation) { toast('Géolocalisation non disponible sur cet appareil'); return; }
-  Object.assign(rec, { on: true, paused: false, kind, pts: [], dist: 0, moving: 0, elapsed: 0, up: 0, altRef: null, t0: Date.now(), last: null, planned: null }, restore || {});
+  Object.assign(rec, { on: true, paused: false, kind, pts: [], dist: 0, moving: 0, elapsed: 0, up: 0, altRef: null, t0: Date.now(), last: null, planned: null, repairs: [], rebuilt: 0, hiddenAt: 0 }, restore || {});
   rec.resumedAt = Date.now();
   rec.line = L.polyline(rec.pts.map((p) => [p[1], p[0]]), { color: '#d64545', weight: 5, opacity: 0.9, interactive: false }).addTo(map);
   rec.watch = navigator.geolocation.watchPosition(onRecPosition, (e) => {
@@ -131,7 +169,7 @@ async function recStart(kind, restore) {
     $('#btnRecord').title = 'Enregistrement en cours';
     try { rec.lock = await navigator.wakeLock?.request('screen'); } catch { /* */ }
     if (!isDesktop()) setSnap('peek');
-    toast(restore ? 'Enregistrement repris' : 'C’est parti ! Gardez l’application ouverte pendant la sortie.', 4500);
+    toast(restore ? 'Enregistrement repris' : 'C’est parti ! Ne verrouillez pas le téléphone : pour le mettre en poche, touchez « 🔒 Poche ».', 6000);
   }
   recPersist(); renderRecBar();
 }
@@ -151,21 +189,45 @@ function recFinish() {
   const out = {
     kind: rec.kind, planned: rec.planned, t0: rec.t0,
     track: simplifyTrack(rec.pts).map((p) => [+p[0].toFixed(5), +p[1].toFixed(5), p[2] == null ? null : Math.round(p[2])]),
-    stats: { dist: Math.round(rec.dist), moving: Math.round(rec.moving), elapsed: Math.round(rec.elapsed), up: Math.round(rec.up) },
+    stats: { dist: Math.round(rec.dist), moving: Math.round(rec.moving), elapsed: Math.round(rec.elapsed), up: Math.round(rec.up), rebuilt: Math.round(rec.rebuilt || 0) },
   };
   recCancel();
   return out.track.length >= 2 && out.stats.dist >= 150 ? out : null;
 }
 function recCancel() {
   if (rec.watch != null) navigator.geolocation.clearWatch(rec.watch);
-  clearInterval(rec.timer); rec.lock?.release?.(); rec.line?.remove();
+  clearInterval(rec.timer); rec.lock?.release?.(); rec.line?.remove(); pocketOff();
   Object.assign(rec, { on: false, paused: false, watch: null, timer: null, lock: null, line: null, kind: null });
   try { localStorage.removeItem(REC_KEY); } catch { /* */ }
   $('#recBar').hidden = true; $('#btnRecord').classList.remove('on'); $('#recPause').textContent = '⏸ Pause';
   $('#btnRecord').title = 'Créer un trajet : enregistrer ma sortie au GPS';
 }
 
-addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') recPersist(); });
+addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'hidden') { recPersist(); if (rec.on) rec.hiddenAt = Date.now(); return; }
+  if (!rec.on) return;
+  // Le système libère le maintien de l'écran allumé quand l'application passe en arrière-plan : on le redemande
+  if (rec.kind === 'manual' && navigator.wakeLock) { try { rec.lock = await navigator.wakeLock.request('screen'); } catch { /* */ } }
+  const away = rec.hiddenAt ? (Date.now() - rec.hiddenAt) / 60000 : 0;
+  rec.hiddenAt = 0;
+  if (away >= 1 && !rec.paused) toast(`⚠️ GPS coupé pendant ${Math.round(away)} min (écran verrouillé ou application quittée). Le passage manquant est reconstitué par les chemins. Utilisez « 🔒 Poche » plutôt que de verrouiller.`, 8000);
+});
+
+/* Mode « Poche » : écran noir (économise la batterie) qui ignore les touchers ; l'application reste
+   au premier plan, donc le GPS continue d'enregistrer. Appui long pour déverrouiller. */
+function pocketOn() {
+  $('#pocket').hidden = false; renderRecBar();
+  if (navigator.wakeLock && !rec.lock && !nav.lock) navigator.wakeLock.request('screen').then((l) => { rec.lock = l; }, () => {});
+}
+function pocketOff() { $('#pocket').hidden = true; }
+(() => {
+  const pk = $('#pocket'); let t = null;
+  const stop = () => { clearTimeout(t); t = null; pk.classList.remove('holding'); };
+  pk.addEventListener('pointerdown', (e) => { e.preventDefault(); pk.classList.add('holding'); t = setTimeout(() => { stop(); pocketOff(); buzz?.(60); }, 1500); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => pk.addEventListener(ev, stop));
+  pk.addEventListener('contextmenu', (e) => e.preventDefault());
+})();
+document.querySelectorAll('.btn-pocket').forEach((b) => b.addEventListener('click', pocketOn));
 addEventListener('pagehide', recPersist);
 
 const isLoopTrack = (t) => t.length > 2 && hav(cll(t[0]), cll(t[t.length - 1])) < 250;
@@ -192,9 +254,10 @@ $('#btnRecordNew').addEventListener('click', startManualRecording);
 $('#recPause').addEventListener('click', recTogglePause);
 $('#recStop').addEventListener('click', () => stopManualRecording());
 
-function stopManualRecording() {
+async function stopManualRecording() {
   if (!rec.on) return;
   if (!confirm('Terminer l’enregistrement ?')) return;
+  if (rec.repairs.length) { busy(true, 'Reconstitution du tracé…'); await recSettle(); busy(false); }
   const r = recFinish();
   if (!r) { toast('Trajet trop court pour être enregistré'); return; }
   openRideDialog(r);
@@ -202,7 +265,8 @@ function stopManualRecording() {
 function openRideDialog(r) {
   pendingRide = r;
   const s = r.stats;
-  $('#recSummary').innerHTML = `<div><b>${fmtKm(s.dist)}</b><small>distance</small></div><div><b>${fmtClock(s.elapsed)}</b><small>durée</small></div><div><b>${fmtSpeed(s.dist, s.moving)}</b><small>moyenne</small></div>`;
+  $('#recSummary').innerHTML = `<div><b>${fmtKm(s.dist)}</b><small>distance</small></div><div><b>${fmtClock(s.elapsed)}</b><small>durée</small></div><div><b>${fmtSpeed(s.dist, s.moving, s.elapsed)}</b><small>moyenne</small></div>`
+    + (s.rebuilt >= 100 ? `<p class="hint rebuilt">📡 GPS coupé par moments : ${fmtKm(s.rebuilt)} reconstitués par les chemins.</p>` : '');
   $('#recName').value = `${isLoopTrack(r.track) ? 'Boucle' : 'Trajet'} du ${new Date(r.t0).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`;
   $('#recDialog').showModal();
 }
@@ -224,9 +288,10 @@ function ridesOnNavStart() {
   if (rec.on) return; // un enregistrement manuel est déjà en cours
   recStart('nav').then(() => { rec.planned = state.route ? routeName() : null; });
 }
-function ridesOnNavStop() {
+async function ridesOnNavStop() {
   if (!rec.on || rec.kind !== 'nav') return;
   const planned = rec.planned;
+  await recSettle();
   const r = recFinish();
   if (!r) return;
   addToHistory(r, planned ? `Sortie : ${planned}` : 'Sortie guidée');
@@ -260,7 +325,7 @@ function openRide(it) {
   $('#resPrio').textContent = it.kind === 'manual' ? '✏️ Ma création' : '🕓 Sortie';
   if (it.stats) {
     $('#stTime').textContent = fmtClock(it.stats.elapsed);
-    $('#miniStats').textContent = `${fmtKm(it.stats.dist)} · ${fmtClock(it.stats.elapsed)} · ${fmtSpeed(it.stats.dist, it.stats.moving)}`;
+    $('#miniStats').textContent = `${fmtKm(it.stats.dist)} · ${fmtClock(it.stats.elapsed)} · ${fmtSpeed(it.stats.dist, it.stats.moving, it.stats.elapsed)}`;
   }
   const nRep = typeof showRideReports === 'function' ? showRideReports(it) : 0;
   $('#routeNote').textContent = (nRep ? `⚠️ ${nRep} signalement(s) fait(s) pendant cette sortie, affichés sur la carte. ` : '') + 'Trajet enregistré au GPS : « 🧭 Démarrer le guidage » pour le refaire (le guidage suit le tracé et vous alerte si vous vous en écartez), « ⬇️ GPX » pour l’exporter.';
@@ -273,7 +338,7 @@ function renderRideList(key, ul, emptyMsg) {
     const s = it.stats || {};
     const li = document.createElement('li');
     li.innerHTML = `<span>${it.loop ? '↻' : '→'}</span><span class="grow"><b>${esc(it.name)}</b>
-      <small>${fmtDate(it.date)} · ${fmtKm(s.dist || 0)} · ${fmtClock(s.elapsed || 0)} · ${fmtSpeed(s.dist, s.moving)}${s.up ? ` · ${s.up} m D+` : ''}${it.reports?.length ? ` · ⚠️ ${it.reports.length}` : ''}</small></span>
+      <small>${fmtDate(it.date)} · ${fmtKm(s.dist || 0)} · ${fmtClock(s.elapsed || 0)} · ${fmtSpeed(s.dist, s.moving, s.elapsed)}${s.up ? ` · ${s.up} m D+` : ''}${it.reports?.length ? ` · ⚠️ ${it.reports.length}` : ''}</small></span>
       ${key === 'history' ? '<button class="keep" aria-label="Copier dans Mes créations" title="Copier dans Mes créations">✏️</button>' : ''}
       <button class="del" aria-label="Supprimer">🗑</button>`;
     li.querySelector('.grow').addEventListener('click', () => openRide(it));

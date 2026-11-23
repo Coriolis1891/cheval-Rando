@@ -373,3 +373,16 @@ body.recording #stillThere { bottom: calc(270px + env(safe-area-inset-bottom)); 
 .lvl.d3 { border-radius: 3px; transform: rotate(45deg) scale(.85); }
 .list li > .lvl { width: 18px; height: 18px; margin: 0 4px; }
 input[type=checkbox] { accent-color: var(--green); width: 18px; height: 18px; }
+
+/* Mode poche */
+#pocket { position: fixed; inset: 0; z-index: 5000; background: #000; color: #6d655d; display: flex; align-items: center; justify-content: center; text-align: center; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#pocket .pk-logo { font-size: 40px; opacity: .45; }
+#pocket .pk-stats { font-size: 28px; font-weight: 700; color: #8f857a; margin: 10px 0; font-variant-numeric: tabular-nums; }
+#pocket p { font-size: 14px; margin: 0 0 40px; }
+#pocket .pk-hold { font-size: 14px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+#pocket .pk-hold span { width: 64px; height: 64px; border-radius: 50%; border: 3px solid #3b352f; background: conic-gradient(#8b5e34 var(--p, 0%), transparent 0); }
+#pocket.holding .pk-hold span { animation: pk-fill 1.5s linear forwards; }
+@property --p { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
+@keyframes pk-fill { to { --p: 100%; } }
+.rec-btns .btn-pocket { flex: none; }
+.rebuilt { grid-column: 1 / -1; margin: 6px 0 0; }

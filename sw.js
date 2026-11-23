@@ -1,5 +1,5 @@
 // Service worker : l'application et les cartes téléchargées fonctionnent sans réseau.
-const CACHE = 'sentiers-cheval-v1';
+const CACHE = 'sentiers-cheval-v2';
 const SHELL = [
   './', 'index.html', 'style.css', 'app.js', 'extras.js', 'rides.js', 'reports.js', 'manifest.webmanifest', 'profiles/cheval.brf',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',

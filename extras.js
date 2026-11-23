@@ -223,6 +223,11 @@ async function startNav() {
   }, { enableHighAccuracy: true, maximumAge: 1000 });
 }
 
+// Le maintien de l'écran allumé est perdu quand l'application passe en arrière-plan : on le redemande au retour
+addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && nav.on && navigator.wakeLock) { try { nav.lock = await navigator.wakeLock.request('screen'); } catch { /* */ } }
+});
+
 function stopNav() {
   nav.on = false;
   if (typeof ridesOnNavStop === 'function') ridesOnNavStop();
